@@ -1,13 +1,29 @@
 package main
 
 import (
+	"context"
 	"log"
-	"server/internal/models"
+	"os"
+	"os/signal"
+	"server/internal/app"
+	"syscall"
 )
 
 func main() {
-	ch := make(chan int, 1)
-	msg := models.NewMessage()
-	log.Println("Server Hi ", *msg)
-	<-ch
+	ctx := context.Background()
+	go app.Run(ctx)
+
+	sigs := make(chan os.Signal, 1)
+	done := make(chan int, 1)
+	signal.Notify(sigs, os.Interrupt, syscall.SIGTERM, syscall.SIGINT)
+	log.Println("Running...")
+
+	go func(done chan int) {
+		ctx.Done()
+		done <- 1
+	}(done)
+
+	<-sigs
+	log.Println("Graceful shutdown")
+	<-done
 }
