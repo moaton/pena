@@ -1,0 +1,11 @@
+FROM golang:latest
+
+RUN go version
+ENV GOPATH=/
+
+COPY ./ ./
+
+RUN apt-get update
+RUN go build -o client ./cmd/main.go
+
+CMD ["./client"]

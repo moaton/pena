@@ -1,0 +1,3 @@
+package sse
+
+func NewClient() {}
