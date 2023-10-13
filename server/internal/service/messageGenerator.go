@@ -7,11 +7,14 @@ import (
 	"github.com/rs/xid"
 )
 
-func (s *service) GenerateMsg() models.Msg {
-	xid := xid.New().String()
+type (
+	xidGenerator func() xid.ID
+)
+
+func (s *service) GenerateMsg(id xidGenerator) models.Msg {
 	period := uint64(rand.Intn(999) + 1)
 	msg := models.Msg{
-		ID:     xid,
+		ID:     id().String(),
 		Period: period,
 	}
 	return msg

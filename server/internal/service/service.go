@@ -9,15 +9,19 @@ import (
 	"server/internal/transport/sse"
 	"sync"
 	"time"
+
+	"github.com/rs/xid"
 )
 
 type Service interface {
 	GetTasks(client *models.Client)
 	StartSender(ctx context.Context)
 	Report(id string, ids []string)
-
+	GenerateMsg(id xidGenerator) models.Msg
 	GetReports() []string
 	GetFailTasks() []string
+	saveFailTask(msg *models.Msg)
+	saveReport(msg *models.Msg)
 }
 
 type service struct {
@@ -50,7 +54,7 @@ func (s *service) StartSender(ctx context.Context) {
 			s.mu.Lock()
 			for _, client := range s.clients {
 				if client.Batchsize > len(s.tasks[client.ID]) {
-					msg := s.GenerateMsg()
+					msg := s.GenerateMsg(xid.New)
 					msgBytes, err := json.Marshal(msg)
 					if err != nil {
 						log.Println("Send json.Marshal err ", err)
