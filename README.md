@@ -9,8 +9,8 @@
 
 ```
 type msg struct {
-    Id string // https://github.com/rs/xid
-    Period uint64 // 1-1000 random
+    Id string       // https://github.com/rs/xid
+    Period uint64   // 1-1000 random
 }
 ```
 
