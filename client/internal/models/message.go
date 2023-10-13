@@ -27,7 +27,6 @@ func (m *Message) Checker(wg *sync.WaitGroup, c chan int, messages chan string) 
 			wg.Done()
 		}
 	}()
-	// m.Period = 982
 	if m.Period > 900 {
 		m.Period = 805
 	}

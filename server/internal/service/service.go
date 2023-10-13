@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"log"
-	"math/rand"
 	"net/http"
 	"server/internal/models"
 	"server/pkg/sse"
@@ -13,7 +12,6 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/rs/xid"
 	"go.etcd.io/bbolt"
 )
 
@@ -93,17 +91,15 @@ func (s *service) StartSender(ctx context.Context) {
 			for addr, conn := range conns {
 				log.Println("len(conn.Sended) ", len(conn.Sended))
 				if conn.Batchsize > len(conn.Sended) {
-					xid := xid.New().String()
-					period := uint64(rand.Intn(999) + 1)
-					msg := models.Msg{
-						Id:     xid,
-						Period: period,
-					}
+
+					msg := s.MessageGenerator()
+
 					msgBytes, err := json.Marshal(msg)
 					if err != nil {
 						log.Println("Send json.Marshal err ", err)
 					}
 					message := []byte("data:" + string(msgBytes) + "\n\n")
+
 					err = conn.Send(message)
 					if err != nil {
 						continue

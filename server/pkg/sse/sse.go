@@ -11,9 +11,9 @@ type Server interface {
 	AddConnection(ctx context.Context, addr string, conn *models.Conn, f chan models.Msg)
 	GetConnections() map[string]*models.Conn
 	Sent(addr string, msg models.Msg)
-	IncrementFull()
 	Close(addr string)
 	ClearQueue(ids []string)
+
 	// Serve(w http.ResponseWriter, r *http.Request)
 	// StartSender(cl chan int)
 	// close(addr string)
@@ -38,6 +38,7 @@ func NewServer() Server {
 	}
 }
 
+// Добавляем коннект
 func (s *server) AddConnection(ctx context.Context, addr string, conn *models.Conn, f chan models.Msg) {
 	s.mu.Lock()
 	s.Connections[addr] = conn
@@ -47,6 +48,7 @@ func (s *server) AddConnection(ctx context.Context, addr string, conn *models.Co
 	s.mu.Unlock()
 }
 
+// Получение коннектов
 func (s *server) GetConnections() map[string]*models.Conn {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -56,6 +58,7 @@ func (s *server) GetConnections() map[string]*models.Conn {
 	return s.Connections
 }
 
+// Закрытие коннекта
 func (s *server) Close(addr string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -77,20 +80,14 @@ func (s *server) Sent(addr string, msg models.Msg) {
 	log.Println("s.Connections ", s.Connections)
 }
 
-func (s *server) IncrementFull() {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	s.full++
-	log.Println("INCREMENT ", s.full)
-}
-
 func (s *server) ClearQueue(ids []string) {
 	log.Println("CLEAR")
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	addr := s.SentTasks[ids[0]]
+
 	for _, id := range ids {
 		if _, ok := s.SentTasks[id]; ok {
+			addr := s.SentTasks[id]
 			delete(s.Connections[addr].Sended, id)
 		}
 	}
