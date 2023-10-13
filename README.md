@@ -3,7 +3,12 @@
 ### Чтобы запустить
 
 ```
-docker-compose up --build server --attach server --attach client
+make run
+```
+
+Запустить тесты
+```
+make test
 ```
 
 ### Задача
