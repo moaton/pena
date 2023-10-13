@@ -1,11 +1,33 @@
 package main
 
 import (
+	"client/internal/app"
+	"client/internal/service"
+	"context"
 	"log"
-	"time"
+	"os"
+	"os/signal"
+	"syscall"
 )
 
 func main() {
-	log.Println("Client Hello")
-	<-time.After(5 * time.Hour)
+	ctx := context.Background()
+
+	service := service.NewService()
+
+	go app.Run(ctx, service)
+
+	sigs := make(chan os.Signal, 1)
+	done := make(chan int, 1)
+	signal.Notify(sigs, os.Interrupt, syscall.SIGTERM, syscall.SIGINT)
+	log.Println("Running...")
+
+	go func(done chan int) {
+		ctx.Done()
+		done <- 1
+	}(done)
+
+	<-sigs
+	log.Println("Graceful shutdown")
+	<-done
 }

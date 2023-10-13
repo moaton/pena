@@ -10,6 +10,7 @@ import (
 type Msg struct {
 	Id     string `json:"id"`
 	Period uint64 `json:"period"`
+	Retry  int    `json:"retry,omitempty"`
 }
 
 func NewMessage() *Msg {
