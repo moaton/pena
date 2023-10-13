@@ -2,7 +2,6 @@ package main
 
 import (
 	"client/internal/app"
-	"client/internal/service"
 	"context"
 	"log"
 	"os"
@@ -12,10 +11,7 @@ import (
 
 func main() {
 	ctx := context.Background()
-
-	service := service.NewService()
-
-	go app.Run(ctx, service)
+	go app.Run(ctx)
 
 	sigs := make(chan os.Signal, 1)
 	done := make(chan int, 1)

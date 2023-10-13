@@ -6,6 +6,8 @@ ENV GOPATH=/
 COPY ./ ./
 
 RUN apt-get update
+
+RUN go mod download
 RUN go build -o client ./cmd/main.go
 
 CMD ["./client"]

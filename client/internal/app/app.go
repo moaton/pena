@@ -5,6 +5,8 @@ import (
 	"context"
 )
 
-func Run(ctx context.Context, service service.Service) {
-	service.Start(ctx)
+func Run(ctx context.Context) {
+	service := service.NewService()
+	go service.CreateClient(ctx)
+	go service.CreateClient(ctx)
 }

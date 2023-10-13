@@ -3,182 +3,137 @@ package service
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"log"
-	"net/http"
+	"server/internal/db"
 	"server/internal/models"
-	"server/pkg/sse"
-	"server/pkg/util"
-	"strconv"
+	"server/internal/transport/sse"
+	"sync"
 	"time"
-
-	"go.etcd.io/bbolt"
 )
 
 type Service interface {
-	Serve(w http.ResponseWriter, r *http.Request)
+	GetTasks(client *models.Client)
 	StartSender(ctx context.Context)
-	AddReport(ids []string)
+	Report(id string, ids []string)
+
 	GetReports() []string
-	GetFails() []string
-	FailsSave(ctx context.Context, f chan models.Msg)
-	// GetFails() []string
+	GetFailTasks() []string
 }
 
 type service struct {
-	server   sse.Server
-	reportDb *bbolt.DB
-	failesDb *bbolt.DB
+	clients     map[string]*models.Client
+	tasks       map[string]map[string]*models.Msg
+	resendTasks map[string]int
+	reportDb    db.Repository
+	failDb      db.Repository
+	sse         sse.Server
+	mu          sync.RWMutex
 }
 
-func NewService(server sse.Server, reportDb, failesDb *bbolt.DB) Service {
+func NewService(sse sse.Server, reportRepo, failRepo db.Repository) Service {
 	return &service{
-		server:   server,
-		reportDb: reportDb,
-		failesDb: failesDb,
+		sse:         sse,
+		clients:     make(map[string]*models.Client, 10),
+		tasks:       make(map[string]map[string]*models.Msg, 10),
+		resendTasks: make(map[string]int),
+		reportDb:    reportRepo,
+		failDb:      failRepo,
 	}
-}
-
-func (s *service) Serve(w http.ResponseWriter, r *http.Request) {
-	// s.server.Serve(w, r)
-	batchsizeStr := r.FormValue("batchsize")
-	batchsize, err := strconv.Atoi(batchsizeStr)
-	if err != nil {
-		util.ResponseError(w, http.StatusBadRequest, err.Error())
-		return
-	}
-	if batchsize == 0 {
-		util.ResponseError(w, http.StatusBadRequest, "batchsize equal 0")
-		return
-	}
-	flusher, ok := w.(http.Flusher)
-	if !ok {
-		util.ResponseError(w, http.StatusBadRequest, "streaming unsupported")
-	}
-	ctx := r.Context()
-	f := make(chan models.Msg)
-	go s.FailsSave(ctx, f)
-	s.server.AddConnection(ctx, r.RemoteAddr, &models.Conn{
-		Writer:    w,
-		Flusher:   flusher,
-		ReqCtx:    ctx,
-		Batchsize: batchsize,
-		Rs:        make(chan int),
-		Sended:    make(map[string]models.Msg, batchsize),
-	}, f)
-	defer s.server.Close(r.RemoteAddr)
-
-	w.Header().Set("Content-Type", "text/event-stream")
-	w.Header().Set("Cache-Control", "no-cache")
-	w.Header().Set("Connection", "keep-alive")
-	w.Header().Set("Access-Control-Allow-Origin", "*")
-
-	<-ctx.Done()
 }
 
 func (s *service) StartSender(ctx context.Context) {
-	log.Println("StartSender started")
 	for {
 		select {
 		case <-ctx.Done():
-			log.Println("StartSender finished")
 			return
 		default:
-			conns := s.server.GetConnections()
-			if conns == nil {
-				continue
-			}
-			for addr, conn := range conns {
-				log.Println("len(conn.Sended) ", len(conn.Sended))
-				if conn.Batchsize > len(conn.Sended) {
-
-					msg := s.MessageGenerator()
-
+			s.mu.Lock()
+			for _, client := range s.clients {
+				if client.Batchsize > len(s.tasks[client.ID]) {
+					msg := s.GenerateMsg()
 					msgBytes, err := json.Marshal(msg)
 					if err != nil {
 						log.Println("Send json.Marshal err ", err)
 					}
 					message := []byte("data:" + string(msgBytes) + "\n\n")
-
-					err = conn.Send(message)
+					_, err = client.Writer.Write(message)
 					if err != nil {
-						continue
+						log.Println("err ", err)
 					}
-					s.server.Sent(addr, msg)
+					if _, ok := s.tasks[client.ID]; !ok {
+						s.tasks[client.ID] = make(map[string]*models.Msg, client.Batchsize)
+					}
+					s.tasks[client.ID][msg.ID] = &msg
+
+					client.Flusher.Flush()
 				}
 			}
-
+			s.mu.Unlock()
 			<-time.After(1 * time.Second)
 		}
 	}
 }
 
-func (s *service) AddReport(ids []string) {
-	s.reportDb.Update(func(tx *bbolt.Tx) error {
-		b := tx.Bucket([]byte("report"))
-		if b == nil {
-			b, _ = tx.CreateBucket([]byte("report"))
-		}
-		for _, id := range ids {
-			b.Put([]byte(id), []byte("success"))
-		}
-		return nil
-	})
-	s.server.ClearQueue(ids)
+func (s *service) GetTasks(client *models.Client) {
+	log.Println("client.ID added ", client.ID)
+	s.mu.Lock()
+	s.clients[client.ID] = client
+	s.mu.Unlock()
+	c := make(chan struct{}, 1)
+
+	s.sse.Serve(client, c)
+	log.Println("client.ID delete ", client.ID)
+	s.mu.Lock()
+	delete(s.clients, client.ID)
+	delete(s.tasks, client.ID)
+	s.mu.Unlock()
 }
 
-func (s *service) GetReports() []string {
-	ids := make([]string, 0, 100)
-	s.reportDb.View(func(tx *bbolt.Tx) error {
-		b := tx.Bucket([]byte("report"))
-		if b == nil {
-			return errors.New("bucket doesn't exist")
-		}
-		err := b.ForEach(func(k, v []byte) error {
-			ids = append(ids, string(k))
-			return nil
-		})
-		return err
-	})
-	return ids
-}
+func (s *service) Report(id string, ids []string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 
-func (s *service) GetFails() []string {
-	ids := make([]string, 0, 100)
-	s.failesDb.View(func(tx *bbolt.Tx) error {
-		b := tx.Bucket([]byte("fail"))
-		if b == nil {
-			return errors.New("bucket doesn't exist")
+	if _, ok := s.tasks[id]; ok {
+		for _, taskId := range ids {
+			s.saveReport(s.tasks[id][taskId])
+			delete(s.tasks[id], taskId)
 		}
-		err := b.ForEach(func(k, v []byte) error {
-			ids = append(ids, string(k))
-			return nil
-		})
-		return err
-	})
-	return ids
-}
-
-func (s *service) FailsSave(ctx context.Context, f chan models.Msg) {
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case msg := <-f:
-			log.Println("FAIL ", msg)
-			s.failesDb.Update(func(tx *bbolt.Tx) error {
-				b := tx.Bucket([]byte("fail"))
-				if b == nil {
-					b, _ = tx.CreateBucket([]byte("fail"))
+		if len(s.tasks[id]) > 0 {
+			for _, msg := range s.tasks[id] {
+				if _, ok := s.resendTasks[msg.ID]; ok && s.resendTasks[msg.ID] == 3 {
+					s.saveFailTask(msg)
+					delete(s.tasks[id], msg.ID)
+					continue
 				}
-				err := b.Put([]byte(msg.Id), []byte("fail"))
-				log.Println("Put ", err)
-				return err
-			})
+				msgBytes, err := json.Marshal(msg)
+				if err != nil {
+					log.Println("Send json.Marshal err ", err)
+				}
+				message := []byte("data:" + string(msgBytes) + "\n\n")
+
+				_, err = s.clients[id].Writer.Write(message)
+				if err != nil {
+					log.Println("err ", err)
+				}
+				s.resendTasks[msg.ID]++
+				s.clients[id].Flusher.Flush()
+			}
 		}
 	}
 }
 
-// func (s *service) GetFails() []string {
-// 	return s.server.GetFails()
-// }
+func (s *service) saveFailTask(msg *models.Msg) {
+	s.failDb.Save(msg.ID, msg.Period)
+}
+
+func (s *service) saveReport(msg *models.Msg) {
+	s.reportDb.Save(msg.ID, msg.Period)
+}
+
+func (s *service) GetFailTasks() []string {
+	return s.failDb.Get()
+}
+
+func (s *service) GetReports() []string {
+	return s.reportDb.Get()
+}

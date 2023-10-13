@@ -4,25 +4,35 @@ import (
 	"context"
 	"log"
 	"net/http"
-	"server/internal/handlers"
+	"server/internal/db"
+	"server/internal/db/bbolt"
 	"server/internal/service"
-	"server/pkg/bolt"
-	"server/pkg/sse"
+	"server/internal/transport/handlers"
+	"server/internal/transport/sse"
 )
 
 func Run(ctx context.Context) {
-	reportDb, err := bolt.NewBolt("reports")
+
+	reportDb, err := bbolt.NewBoltDb("report")
 	if err != nil {
-		log.Fatalf("bolt.NewBolt() err %v", err)
+		log.Fatalf("bbolt.NewBoltDb err %v", err)
 	}
-	failesDb, err := bolt.NewBolt("failes")
+
+	failsDb, err := bbolt.NewBoltDb("fail")
 	if err != nil {
-		log.Fatalf("bolt.NewBolt() err %v", err)
+		log.Fatalf("bbolt.NewBoltDb err %v", err)
 	}
-	server := sse.NewServer()
-	service := service.NewService(server, reportDb, failesDb)
-	go service.StartSender(context.Background())
-	router := handlers.NewRouter(service)
+
+	reportRepo := db.NewRepository(reportDb)
+	failRepo := db.NewRepository(failsDb)
+
+	sse := sse.NewServer()
+
+	service := service.NewService(sse, reportRepo, failRepo)
+	go service.StartSender(ctx)
+
+	handlers := handlers.NewHandlers(service)
+	router := handlers.NewRouter()
 
 	if err := http.ListenAndServe(":3000", router); err != nil {
 		log.Fatalf("http.ListenAndServe err %v", err)
