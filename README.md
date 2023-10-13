@@ -60,7 +60,8 @@
 
 > | http code     | content-type                      | response                                                            |
 > |---------------|-----------------------------------|---------------------------------------------------------------------|
-> | `400`         | `application/json`                | `{"code":"400","message":"Bad Request"}`                            |
+> | `200`         | `text/event-stream`               | `{"id":"ckkgmc3h5gbufi2sr320","period":382}`                        |
+> | `400`         | `application/json`                | `{"error": ""}`                                                     |
 
 </details>
 
@@ -83,7 +84,7 @@
 
 > | http code     | content-type                      | response                                                            |
 > |---------------|-----------------------------------|---------------------------------------------------------------------|
-> | `200`         | `text/plain;charset=UTF-8`        | `{message:'success'}`                                               |
+> | `200`         | `application/json`                | `{message:'success'}`                                               |
 
 </details>
 
@@ -99,7 +100,7 @@
 
 > | http code     | content-type                      | response                                                            |
 > |---------------|-----------------------------------|---------------------------------------------------------------------|
-> | `200`         | `text/plain;charset=UTF-8`        | `{ids:['ckkg3sm0tshtqjgo9cb0', 'ckkg3qu0tshtqjgo9c7g']}`            |
+> | `200`         | `application/json`                | `{ids:['ckkg3sm0tshtqjgo9cb0', 'ckkg3qu0tshtqjgo9c7g']}`            |
 
 </details>
 
@@ -115,7 +116,7 @@
 
 > | http code     | content-type                      | response                                                            |
 > |---------------|-----------------------------------|---------------------------------------------------------------------|
-> | `200`         | `text/plain;charset=UTF-8`        | `{ids:['ckkg3sm0tshtqjgo9cb0', 'ckkg3qu0tshtqjgo9c7g']}`            |
+> | `200`         | `application/json`                | `{ids:['ckkg3sm0tshtqjgo9cb0', 'ckkg3qu0tshtqjgo9c7g']}`            |
 
 </details>
 
