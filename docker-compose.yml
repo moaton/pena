@@ -3,8 +3,8 @@ version: '3.3'
 services:
   server:
     build: ./server
-    # depends_on:
-    #   - "client"
+    depends_on:
+      - "client"
     ports:
       - "3000:3000"
   
