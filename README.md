@@ -8,13 +8,10 @@
 >   /task - принимает через query параметр batchsize и отдаёт клиенту по sse структуры 
 
 ```
->   type msg struct {
->   
->   Id string // https://github.com/rs/xid
->   
->   Period uint64 // 1-1000 random
->   
->   }
+type msg struct {
+    Id string // https://github.com/rs/xid
+    Period uint64 // 1-1000 random
+}
 ```
 
 >   /report - принимает массив id структур описанных выше и помечает их обарботанными. тем или иным образом, на ваше усмотрение. уже обработанные msg повторно отправляться не должны
