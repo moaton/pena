@@ -29,20 +29,23 @@
 ```bash
 ├───client
 │   ├───cmd
-│   ├───internal
-│   │   ├───app
-│   │   └───models
-│   └───pkg
-│       └───sse
+│   └───internal
+│       ├───app
+│       ├───models
+│       └───service
 └───server
     ├───cmd
     ├───internal
     │   ├───app
-    │   ├───handlers
+    │   ├───db
+    │   │   └───bbolt
     │   ├───models
-    │   └───service
+    │   ├───service
+    │   └───transport
+    │       ├───handlers
+    │       └───sse
     └───pkg
-        └───sse
+        └───util
 ```
 
 ### APIs
