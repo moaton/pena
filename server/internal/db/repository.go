@@ -10,7 +10,7 @@ import (
 
 type Repository interface {
 	Get() []string
-	Save(id string, period uint64)
+	Save(id string, period uint64) error
 }
 
 type repository struct {
@@ -40,9 +40,9 @@ func (r *repository) Get() []string {
 	return ids
 }
 
-func (r *repository) Save(id string, period uint64) {
+func (r *repository) Save(id string, period uint64) error {
 	path := []byte(r.bolt.Path())
-	r.bolt.Update(func(tx *bolt.Tx) error {
+	return r.bolt.Update(func(tx *bolt.Tx) error {
 		b, err := tx.CreateBucketIfNotExists(path)
 		if err != nil {
 			log.Println("tx.CreateBucketIfNotExists err ", err)

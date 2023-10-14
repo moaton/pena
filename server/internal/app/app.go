@@ -17,11 +17,13 @@ func Run(ctx context.Context) {
 	if err != nil {
 		log.Fatalf("bbolt.NewBoltDb err %v", err)
 	}
+	defer reportDb.Close()
 
 	failsDb, err := bbolt.NewBoltDb("fail")
 	if err != nil {
 		log.Fatalf("bbolt.NewBoltDb err %v", err)
 	}
+	defer failsDb.Close()
 
 	reportRepo := db.NewRepository(reportDb)
 	failRepo := db.NewRepository(failsDb)

@@ -49,7 +49,7 @@ func (m *mockDb) Get() []string {
 	return []string{}
 }
 
-func (m *mockDb) Save(id string, period uint64) {}
+func (m *mockDb) Save(id string, period uint64) error { return nil }
 
 type mockService struct {
 	clients     map[string]*models.Client
@@ -77,8 +77,8 @@ func (m *mockService) StartSender(ctx context.Context)        {}
 func (m *mockService) Report(id string, ids []string)         {}
 func (m *mockService) GetReports() []string                   { return []string{} }
 func (m *mockService) GetFailTasks() []string                 { return []string{} }
-func (s *mockService) saveFailTask(msg *models.Msg)           {}
-func (s *mockService) saveReport(msg *models.Msg)             {}
+func (s *mockService) saveFailTask(msg *models.Msg) error     { return nil }
+func (s *mockService) saveReport(msg *models.Msg) error       { return nil }
 func (s *mockService) GenerateMsg(id xidGenerator) models.Msg { return models.Msg{} }
 
 func TestNewService(t *testing.T) {

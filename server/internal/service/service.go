@@ -20,8 +20,8 @@ type Service interface {
 	GenerateMsg(id xidGenerator) models.Msg
 	GetReports() []string
 	GetFailTasks() []string
-	saveFailTask(msg *models.Msg)
-	saveReport(msg *models.Msg)
+	saveFailTask(msg *models.Msg) error
+	saveReport(msg *models.Msg) error
 }
 
 type service struct {
@@ -99,13 +99,19 @@ func (s *service) Report(id string, ids []string) {
 
 	if _, ok := s.tasks[id]; ok {
 		for _, taskId := range ids {
-			s.saveReport(s.tasks[id][taskId])
+			err := s.saveReport(s.tasks[id][taskId])
+			if err != nil {
+				log.Println("ReportMsg hasn't saved")
+			}
 			delete(s.tasks[id], taskId)
 		}
 		if len(s.tasks[id]) > 0 {
 			for _, msg := range s.tasks[id] {
 				if _, ok := s.resendTasks[msg.ID]; ok && s.resendTasks[msg.ID] == 3 {
-					s.saveFailTask(msg)
+					err := s.saveFailTask(msg)
+					if err != nil {
+						log.Println("FailMsg hasn't saved")
+					}
 					delete(s.tasks[id], msg.ID)
 					continue
 				}
@@ -126,12 +132,12 @@ func (s *service) Report(id string, ids []string) {
 	}
 }
 
-func (s *service) saveFailTask(msg *models.Msg) {
-	s.failDb.Save(msg.ID, msg.Period)
+func (s *service) saveFailTask(msg *models.Msg) error {
+	return s.failDb.Save(msg.ID, msg.Period)
 }
 
-func (s *service) saveReport(msg *models.Msg) {
-	s.reportDb.Save(msg.ID, msg.Period)
+func (s *service) saveReport(msg *models.Msg) error {
+	return s.reportDb.Save(msg.ID, msg.Period)
 }
 
 func (s *service) GetFailTasks() []string {
