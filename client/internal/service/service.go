@@ -2,11 +2,11 @@ package service
 
 import (
 	"bufio"
-	"bytes"
 	"client/internal/models"
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log"
 	"math/rand"
 	"net/http"
@@ -16,47 +16,75 @@ import (
 )
 
 type Service interface {
-	CreateClient(ctx context.Context)
+	CreateClient(ctx context.Context) (*models.Client, error)
+	Start(ctx context.Context, client *models.Client)
+	Checker(wg *sync.WaitGroup, msg *models.Message, close chan int, messages chan string)
+	Handler(ctx context.Context, client *models.Client, wg *sync.WaitGroup, ch chan string)
+	// CreateClient(ctx context.Context)
 }
 
 type service struct {
+	// Client HTTPClient
 }
 
 func NewService() Service {
 	return &service{}
 }
 
-func (s *service) CreateClient(ctx context.Context) {
+func (s *service) CreateClient(ctx context.Context) (*models.Client, error) {
+	batchsize := rand.Intn(10-2) + 2
+	log.Println("batchsize ", batchsize)
+
+	url := fmt.Sprintf("http://server:3000/task?batchsize=%v", batchsize)
+	taskReq, err := http.NewRequest("GET", url, nil)
+	if err != nil {
+		log.Println("http.NewRequest err ", err)
+		return nil, err
+	}
+
+	reportReq, err := http.NewRequest("POST", "http://server:3000/report", nil)
+	if err != nil {
+		log.Println("http.NewRequest err ", err)
+		return nil, err
+	}
+	reportReq.Header.Set("Content-Type", "application/json")
+
+	return &models.Client{
+		Batchsize: batchsize,
+		Task: models.Http{
+			Do:      http.DefaultClient.Do,
+			Request: taskReq,
+		},
+		Report: models.Http{
+			Do:      http.DefaultClient.Do,
+			Request: reportReq,
+		},
+	}, nil
+}
+
+func (s *service) Start(ctx context.Context, client *models.Client) {
+	var err error
+
 	reqCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
-	batchsize := rand.Intn(10-2) + 2
-	log.Println("batchsize ", batchsize)
-	url := fmt.Sprintf("http://server:3000/task?batchsize=%v", batchsize)
-	req, err := http.NewRequest("GET", url, nil)
-	if err != nil {
-		log.Println("http.NewRequest err ", err)
-	}
-	client := &http.Client{}
-	res, err := client.Do(req)
+	c := make(chan int, 1)
+
+	client.Task.Response, err = client.Task.Do(client.Task.Request)
 	if err != nil {
 		log.Println("client.Do err ", err)
 	}
-	uuid := res.Cookies()[0].Value
+	go client.Close(c)
 
-	reader := bufio.NewReader(res.Body)
-	c := make(chan int, 1)
-	go func(c chan int, res *http.Response, uuid string) {
-		<-c
-		res.Body.Close()
-		log.Println("Client fall ", uuid)
-	}(c, res, uuid)
+	client.GetUUID()
 
-	messages := make(chan string, batchsize)
+	reader := bufio.NewReader(client.Task.Response.Body)
+
+	messages := make(chan string, client.Batchsize)
 
 	var wg sync.WaitGroup
-	go s.Handler(reqCtx, uuid, &wg, messages)
-	wg.Add(batchsize)
+	go s.Handler(reqCtx, client, &wg, messages)
+	wg.Add(client.Batchsize)
 
 	for {
 		line, err := reader.ReadString('\n')
@@ -97,7 +125,7 @@ func (s *service) Checker(wg *sync.WaitGroup, msg *models.Message, close chan in
 	wg.Done()
 }
 
-func (s *service) Handler(ctx context.Context, uuid string, wg *sync.WaitGroup, ch chan string) {
+func (s *service) Handler(ctx context.Context, client *models.Client, wg *sync.WaitGroup, ch chan string) {
 	wg.Wait()
 	length := len(ch)
 	ids := make([]string, 0, length)
@@ -108,13 +136,13 @@ func (s *service) Handler(ctx context.Context, uuid string, wg *sync.WaitGroup, 
 		for i := 0; i < length; i++ {
 			ids = append(ids, <-ch)
 		}
-		go s.SendReport(ctx, uuid, ids)
+		go s.SendReport(ctx, client, ids)
 	}
 	wg.Add(cap(ch))
-	go s.Handler(ctx, uuid, wg, ch)
+	go s.Handler(ctx, client, wg, ch)
 }
 
-func (s *service) SendReport(ctx context.Context, uuid string, ids []string) {
+func (s *service) SendReport(ctx context.Context, client *models.Client, ids []string) {
 	var request struct {
 		Ids []string `json:"ids"`
 	}
@@ -124,18 +152,15 @@ func (s *service) SendReport(ctx context.Context, uuid string, ids []string) {
 		log.Println("json.Marshal err ", err)
 		return
 	}
-	req, err := http.NewRequest("POST", "http://server:3000/report", bytes.NewBuffer(idsStr))
-	if err != nil {
-		log.Println("http.NewRequest err ", err)
-		return
-	}
-	req.Header.Set("Content-Type", "application/json")
-	req.AddCookie(&http.Cookie{
+
+	client.Report.Request.AddCookie(&http.Cookie{
 		Name:  "uuid",
-		Value: uuid,
+		Value: client.ID,
 	})
-	client := &http.Client{}
-	_, err = client.Do(req)
+	bodyReader := strings.NewReader(string(idsStr))
+	client.Report.Request.Body = io.NopCloser(bodyReader)
+
+	_, err = client.Report.Do(client.Report.Request)
 	if err != nil {
 		log.Println("client.Do err ", err)
 		return
